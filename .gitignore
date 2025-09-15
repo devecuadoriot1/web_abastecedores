@@ -1,0 +1,9 @@
+.env
+.env.docker
+.dockerignore
+/node_modules/
+
+/.cache/
+/.cache/frontconfig/
+/cache/
+/cache/*

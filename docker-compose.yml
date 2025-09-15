@@ -1,0 +1,68 @@
+version: "3.9"
+
+name: abastecedores
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+        TZ: America/Guayaquil
+    container_name: abastecedores-php
+    working_dir: /var/www
+    environment:
+      TZ: America/Guayaquil
+      # Sin variables de DB por ahora
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8080
+    volumes:
+      - ./:/var/www
+      # Mejora rendimiento en Windows: vendor/node_modules en volúmenes
+      - vendor:/var/www/vendor
+      - composer-cache:/tmp/composer
+    networks:
+      - appnet
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: abastecedores-nginx
+    depends_on:
+      - app
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - appnet
+
+  # Servicio Node opcional para Vite en desarrollo
+  node:
+    image: node:20-alpine
+    container_name: abastecedores-node
+    profiles: ["dev"]
+    working_dir: /var/www
+    environment:
+      # Asegura que Vite escuche fuera del contenedor
+      VITE_HOST: 0.0.0.0
+    volumes:
+      - ./:/var/www
+      - node_modules:/var/www/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -lc "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    networks:
+      - appnet
+
+volumes:
+  vendor:
+  node_modules:
+  composer-cache:
+
+networks:
+  appnet:
+    driver: bridge
