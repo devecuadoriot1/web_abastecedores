@@ -2,22 +2,41 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
+use App\Models\Usuario;
+use App\Models\Organizacion;
+use App\Models\Rol;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Hash;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $org = Organizacion::create([
+            'id'     => (string) Str::uuid(),
+            'nombre' => 'GAD Municipal de Portoviejo',
+            'ruc'    => '9999999999',
+            'estado' => 'ACTIVA',
+        ]);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $rolAdmin = Rol::create([
+            'id'     => (string) Str::uuid(),
+            'org_id' => $org->id,
+            'nombre' => 'Administrador',
+            'slug'   => 'admin',
+        ]);
+
+        Usuario::create([
+            'id'            => (string) Str::uuid(),
+            'org_id'        => $org->id,
+            'rol_id'        => $rolAdmin->id,
+            'nombre'        => 'Admin',
+            'email'         => 'davidclaudio5000@gmail.com',
+            'password_hash' => Hash::make('Admin123'),
+            'estado'        => 'ACTIVO',
+            'is_superadmin' => true,
         ]);
     }
 }

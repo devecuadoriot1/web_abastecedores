@@ -22,7 +22,7 @@ services:
     volumes:
       - ./:/var/www
       # Mejora rendimiento en Windows: vendor/node_modules en volúmenes
-      - vendor:/var/www/vendor
+      - ./vendor:/var/www/vendor
       - composer-cache:/tmp/composer
     networks:
       - appnet
@@ -59,7 +59,6 @@ services:
       - appnet
 
 volumes:
-  vendor:
   node_modules:
   composer-cache:
 
