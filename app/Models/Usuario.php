@@ -17,13 +17,17 @@ class Usuario extends Authenticatable implements MustVerifyEmailContract
     use HasApiTokens, HasFactory, Notifiable, HasUuid, MustVerifyEmail;
 
     protected $table = 'usuarios';
-    protected $Keytype = 'string';
+    protected $KeyType = 'string';
     public $incrementing = false;
     protected $fillable = [
         'org_id','rol_id','nombre','email','email_verified_at','password_hash','estado','is_superadmin'
     ];
     protected $hidden = ['password_hash','remember_token'];
-    protected $casts = ['email_verified_at'=>'datetime'];
+    protected $casts = ['email_verified_at' => 'datetime',
+                        'ultimo_login_at' => 'datetime',
+                        'mfa_enabled' => 'boolean',
+                        'must_reset_password' => 'boolean',
+                        'last_password_change_at' => 'datetime',];
     public $timestamps = true;
 
     // Laravel espera "password" por defecto:
