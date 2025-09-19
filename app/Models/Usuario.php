@@ -20,7 +20,9 @@ class Usuario extends Authenticatable implements MustVerifyEmailContract
     protected $KeyType = 'string';
     public $incrementing = false;
     protected $fillable = [
-        'org_id','rol_id','nombre','email','email_verified_at','password_hash','estado','is_superadmin'
+        'org_id','rol_id','nombre','email','email_verified_at','password_hash',
+        'estado','is_superadmin','telefono','ultimo_login_at','mfa_enabled',
+        'must_reset_password','last_password_change_at'
     ];
     protected $hidden = ['password_hash','remember_token'];
     protected $casts = ['email_verified_at' => 'datetime',
@@ -53,6 +55,18 @@ class Usuario extends Authenticatable implements MustVerifyEmailContract
     public function rol()
     {
         return $this->belongsTo(Rol::class, 'rol_id');
+    }
+
+    // Multi-rol real
+    public function roles() {
+        return $this->belongsToMany(Rol::class, 'usuario_rol', 'usuario_id', 'rol_id');
+    }
+
+    // Helper de autorización por slug
+    public function hasRole(string $slug): bool
+    {
+        if ($this->is_superadmin) return true;
+        return $this->roles()->where('slug', $slug)->exists();
     }
 
     public function sendPasswordResetNotification($token): void

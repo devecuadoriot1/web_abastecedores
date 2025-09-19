@@ -8,19 +8,17 @@ use App\Models\Rol;
 
 class StoreUserRequest extends FormRequest
 {
-    public function authorize(): bool
-    {
-        // El control fino irá por abilities/policies en rutas y controller.
-        return true;
-    }
+    public function authorize(): bool { return true; }
 
     public function rules(): array
     {
         return [
-            'nombre'  => ['required','string','max:255'],
-            'email'   => ['required','email','max:255','unique:usuarios,email'],
-            'telefono'=> ['nullable','string','max:50'],
-            'rol_id'  => ['required','uuid', Rule::exists('roles','id')],
+            'nombre'   => ['required','string','max:150'],
+            'email'    => ['required','email','max:190','unique:usuarios,email'],
+            'telefono' => ['nullable','string','max:50'],
+            'roles'    => ['required','array','min:1'],
+            'roles.*'  => ['uuid', Rule::exists('roles','id')],
+            // (opcional) datos extra a futuro: documento, ciudad, etc. -> agregar aquí
         ];
     }
 
@@ -28,18 +26,33 @@ class StoreUserRequest extends FormRequest
     {
         $validator->after(function ($v) {
             $actor = $this->user();
-            if (!$actor) return;
+            if (!$actor || $actor->is_superadmin) return;
 
-            if (!$actor->is_superadmin) {
-                // Asegurar que el rol pertenece a su misma organización
-                $rolValido = Rol::query()
-                    ->where('id', $this->input('rol_id'))
-                    ->where('org_id', $actor->org_id)
-                    ->exists();
-                if (!$rolValido) {
-                    $v->errors()->add('rol_id', 'El rol no pertenece a tu organización.');
-                }
+            // Roles deben pertenecer a su misma organización
+            $rolesIds = collect($this->input('roles', []));
+            $count = Rol::whereIn('id', $rolesIds)->where('org_id', $actor->org_id)->count();
+            if ($count !== $rolesIds->count()) {
+                $v->errors()->add('roles', 'Uno o más roles no pertenecen a tu organización.');
             }
         });
     }
+
+    // public function withValidator($validator)
+    // {
+    //    $validator->after(function ($v) {
+    //         $actor = $this->user();
+    //         if (!$actor) return;
+
+    //         // Todos los roles deben pertenecer a la misma org del actor (si no es superadmin)
+    //         $rolesIds = collect($this->input('roles', []));
+    //         if ($this->filled('rol_id')) $rolesIds = $rolesIds->push($this->input('rol_id'))->unique();
+
+    //         if ($rolesIds->isNotEmpty() && !$actor->is_superadmin) {
+    //             $count = Rol::whereIn('id', $rolesIds)->where('org_id', $actor->org_id)->count();
+    //             if ($count !== $rolesIds->count()) {
+    //                 $v->errors()->add('roles', 'Uno o más roles no pertenecen a tu organización.');
+    //             }
+    //         }
+    //     });
+    // }
 }

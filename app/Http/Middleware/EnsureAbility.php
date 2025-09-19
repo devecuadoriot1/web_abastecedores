@@ -7,20 +7,26 @@ use Illuminate\Http\Request;
 
 class EnsureAbility
 {
-    public function handle(Request $request, Closure $next, string ...$abilities)
+    public function handle(Request $request, Closure $next, string $requiredAbility)
     {
-        $token = $request->user()?->currentAccessToken();
-
-        if (!$token) {
-            return response()->json(['message' => 'No autenticado.'], 401);
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'No autenticado'], 401);
         }
 
-        foreach ($abilities as $ability) {
-            if (! $token->can($ability) && ! $token->can('*')) {
-                return response()->json(['message' => 'No autorizado. Falta ability: '.$ability], 403);
-            }
+        // SuperAdmin pasa siempre
+        if ($user->is_superadmin) {
+            return $next($request);
         }
 
-        return $next($request);
+        $abilities = $user->currentAccessToken()?->abilities ?? [];
+        if (in_array('*', $abilities, true) || $user->tokenCan($requiredAbility)) {
+            return $next($request);
+        }
+
+        return response()->json([
+            'message' => "No autorizado. Falta ability: {$requiredAbility}"
+        ], 403);
+
     }
 }

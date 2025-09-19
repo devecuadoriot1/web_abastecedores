@@ -12,8 +12,9 @@ class UpdateUserRoleRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
-            'rol_id' => ['required','uuid', Rule::exists('roles','id')],
+       return [
+            'roles'   => ['required','array','min:1'],
+            'roles.*' => ['uuid', Rule::exists('roles','id')],
         ];
     }
 
@@ -21,16 +22,12 @@ class UpdateUserRoleRequest extends FormRequest
     {
         $validator->after(function ($v) {
             $actor = $this->user();
-            if (!$actor) return;
+            if (!$actor || $actor->is_superadmin) return;
 
-            if (!$actor->is_superadmin) {
-                $rolValido = Rol::query()
-                    ->where('id', $this->input('rol_id'))
-                    ->where('org_id', $actor->org_id)
-                    ->exists();
-                if (!$rolValido) {
-                    $v->errors()->add('rol_id', 'El rol no pertenece a tu organización.');
-                }
+            $rolesIds = collect($this->input('roles', []));
+            $count = Rol::whereIn('id', $rolesIds)->where('org_id', $actor->org_id)->count();
+            if ($count !== $rolesIds->count()) {
+                $v->errors()->add('roles', 'Uno o más roles no pertenecen a tu organización.');
             }
         });
     }

@@ -3,101 +3,118 @@
 namespace App\Http\Controllers;
 
 use App\Models\Usuario;
+use Illuminate\Http\Request;
 use App\Http\Requests\StoreUserRequest;
-use App\Http\Requests\UpdateUserRoleRequest;
-use App\Http\Requests\UpdateUserStatusRequest;
+use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\UsuarioResource;
 use App\Actions\Users\CreateUserAction;
+use App\Actions\Users\UpdateUserAction;
 use App\Actions\Users\ResendCredentialsAction;
-use App\Actions\Users\ChangeUserRoleAction;
-use App\Actions\Users\ChangeUserStatusAction;
-use Illuminate\Http\Request;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+
 
 class OrgUserController extends Controller
 {
-    use AuthorizesRequests;
+    use \Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+
     public function index(Request $request)
     {
-        $actor = $request->user();
-        $this->authorize('viewAny', Usuario::class);
+        try {
+            $actor = $request->user();
+            $this->authorize('viewAny', Usuario::class);
 
-        $q = Usuario::query()->with('rol');
+            $q = Usuario::query()->with('roles');
 
-        if (!$actor->is_superadmin) {
-            $q->where('org_id', $actor->org_id);
-        } else {
-            // opcional: permitir filtrar por org_id desde Postman
-            if ($org = $request->query('org_id')) {
+            if (!$actor->is_superadmin) {
+                $q->where('org_id', $actor->org_id);
+            } elseif ($org = $request->query('org_id')) {
                 $q->where('org_id', $org);
             }
+
+            if ($s = $request->query('q')) {
+                $q->where(function ($w) use ($s) {
+                    $w->where('nombre','like',"%{$s}%")
+                      ->orWhere('email','like',"%{$s}%");
+                });
+            }
+            if ($estado = $request->query('estado')) $q->where('estado',$estado);
+
+            $users = $q->orderBy('nombre')->paginate($request->integer('per_page', 15));
+
+            return UsuarioResource::collection($users)->additional(['ok'=>true]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok'=>false,'code'=>'UNEXPECTED','message'=>'Error inesperado.'], 500);
         }
-
-        if ($s = $request->query('q')) {
-            $q->where(function ($w) use ($s) {
-                $w->where('nombre','like',"%{$s}%")
-                  ->orWhere('email','like',"%{$s}%");
-            });
-        }
-        if ($rol = $request->query('rol_id')) $q->where('rol_id', $rol);
-        if ($estado = $request->query('estado')) $q->where('estado', $estado);
-
-        $users = $q->orderBy('nombre')->paginate($request->integer('per_page', 15));
-
-        return UsuarioResource::collection($users)->additional(['ok'=>true]);
     }
 
     public function store(StoreUserRequest $request, CreateUserAction $action)
     {
-        $actor = $request->user();
-        $this->authorize('create', Usuario::class);
+        try {
+            $this->authorize('create', Usuario::class);
 
-        $user = $action($request->validated(), $actor, $request);
+            $user = $action($request->validated(), $request->user(), $request);
 
-        return (new UsuarioResource($user))
-            ->additional(['ok'=>true,'message'=>'Usuario creado y credenciales enviadas.'])
-            ->response()->setStatusCode(201);
+            return (new UsuarioResource($user))
+                ->additional(['ok'=>true,'message'=>'Usuario creado y credenciales enviadas.'])
+                ->response()->setStatusCode(201);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['ok'=>false,'code'=>'VALIDATION_ERROR','message'=>'Datos inválidos.','errors'=>$e->errors()], 422);
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json(['ok'=>false,'code'=>'FORBIDDEN','message'=>'No está autorizado para crear usuarios.'], 403);
+        } catch (\Throwable $e) {
+            return response()->json(['ok'=>false,'code'=>'UNEXPECTED','message'=>'Error inesperado.'], 500);
+        }
+    }
+
+    public function update(UpdateUserRequest $request, Usuario $user, \App\Actions\Users\UpdateUserAction $action)
+    {
+        try {
+            $this->authorize('update', $user);
+
+            $updated = $action($user, $request->validated(), $request->user(), $request);
+
+            return (new UsuarioResource($updated))
+                ->additional(['ok'=>true,'message'=>'Usuario actualizado.']);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['ok'=>false,'code'=>'VALIDATION_ERROR','message'=>'Datos inválidos.','errors'=>$e->errors()], 422);
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json(['ok'=>false,'code'=>'FORBIDDEN','message'=>'No está autorizado para actualizar este usuario.'], 403);
+        } catch (\Throwable $e) {
+            return response()->json(['ok'=>false,'code'=>'UNEXPECTED','message'=>'Error inesperado.'], 500);
+        }
     }
 
     public function resendCredentials(Request $request, Usuario $user, ResendCredentialsAction $action)
     {
-        $actor = $request->user();
-        // capacidad: org.members.update (o create), reusa update
-        if (!$actor->is_superadmin && !$actor->tokenCan('org.members.update') && !$actor->tokenCan('org.members.create')) {
-            return response()->json(['ok'=>false,'message'=>'Forbidden'], 403);
+        try {
+            // mismo permiso que update
+            $this->authorize('update', $user);
+
+            $action($user, $request->user(), $request);
+
+            return response()->json(['ok'=>true,'message'=>'Credenciales temporales reenviadas.']);
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json(['ok'=>false,'code'=>'FORBIDDEN','message'=>'No está autorizado.'], 403);
+        } catch (\Throwable $e) {
+            return response()->json(['ok'=>false,'code'=>'UNEXPECTED','message'=>'Error inesperado.'], 500);
         }
-
-        $action($user, $actor, $request);
-
-        return response()->json(['ok'=>true,'message'=>'Credenciales temporales reenviadas.']);
-    }
-
-    public function updateRole(UpdateUserRoleRequest $request, Usuario $user, ChangeUserRoleAction $action)
-    {
-        $this->authorize('updateRole', $user);
-
-        $action($user, $request->validated('rol_id'), $request->user(), $request);
-
-        return response()->json(['ok'=>true,'message'=>'Rol actualizado.']);
-    }
-
-    public function updateStatus(UpdateUserStatusRequest $request, Usuario $user, ChangeUserStatusAction $action)
-    {
-        $this->authorize('updateStatus', $user);
-
-        $action($user, $request->validated('estado'), $request->user(), $request);
-
-        return response()->json(['ok'=>true,'message'=>'Estado actualizado.']);
     }
 
     public function destroy(Request $request, Usuario $user)
     {
-        $this->authorize('delete', $user);
+        try {
+            $this->authorize('delete', $user);
 
-        $user->estado = 'BAJA';
-        $user->tokens()->delete();
-        $user->save();
+            $user->estado = 'INACTIVO';
+            $user->tokens()->delete();
+            $user->save();
 
-        return response()->json(['ok'=>true,'message'=>'Usuario dado de baja.']);
+            return response()->json(['ok'=>true,'message'=>'Usuario dado de baja.']);
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            return response()->json(['ok'=>false,'code'=>'FORBIDDEN','message'=>'No está autorizado para eliminar.'], 403);
+        } catch (\Throwable $e) {
+            return response()->json(['ok'=>false,'code'=>'UNEXPECTED','message'=>'Error inesperado.'], 500);
+        }
     }
 }

@@ -6,6 +6,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\EnsureAbility;
 use App\Http\Middleware\EnsureEmailVerifiedForRole;
 use App\Http\Middleware\EnsureOrgScope;
+use App\Http\Middleware\EnsureTokenNotExpired;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,25 +21,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'abilities' => EnsureAbility::class,
             'verified.role' => EnsureEmailVerifiedForRole::class,
             'org.scope' => EnsureOrgScope::class,
+            'token.fresh' => EnsureTokenNotExpired::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();
-
-
-
-
-use App\Models\Usuario;
-
-$u = Usuario::where('email','davidclaudio5000@gmail.com')->first();  
-$u->tokens()->delete(); 
-
-$token = $u->createToken('postman', [
-  'org.members.read',
-  'org.members.create',
-  'org.members.update',
-  'org.members.delete'
-])->plainTextToken;
-
-$token;
